@@ -1,0 +1,13 @@
+{
+  "name": "iced-web-app",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run server.ts",
+    "build:wasm": "bash scripts/build-wasm.sh",
+    "build:all": "bun run build:wasm && echo '✓ Build complete'"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}

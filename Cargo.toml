@@ -1,0 +1,32 @@
+[package]
+name = "iced_web_app"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+iced = { version = "0.14", features = ["wgpu"] }
+
+[dependencies.web-sys]
+version = "0.3"
+features = [
+    "console",
+    "Window",
+    "Document",
+]
+
+[target.wasm32-unknown-unknown.dependencies]
+iced = { version = "0.14", features = ["wgpu"] }
+wasm-bindgen = "0.2"
+web-sys = { version = "0.3", features = [
+    "console",
+    "Window",
+    "Document",
+    "HtmlFontElement",
+    "FontFace",
+    "FontFaceSet",
+] }
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
