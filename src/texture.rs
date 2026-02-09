@@ -53,20 +53,46 @@ impl TextureLoader {
             1
         };
 
-        // 读取各个层级的数据
-        let levels: Vec<_> = reader.levels().collect();
+        // ktx2 crate 的 levels() 可能返回空数据，需要手动解析
+        // 从 header 读取 DFD 偏移和长度，然后找到 Level Index
 
-        if levels.is_empty() {
-            return Err("No texture data found in KTX2 file".to_string());
+        let dfd_offset = header.data_format_descriptor[0] as usize;
+        let dfd_length = header.data_format_descriptor[1] as usize;
+        let level_index_offset = dfd_offset + dfd_length;
+
+        // Level Index 包含 3 个 u64 值
+        if level_index_offset + 24 > bytes.len() {
+            return Err("KTX2 file too short for Level Index".to_string());
         }
 
-        // 获取第一层级的纹理数据
-        let first_level = &levels[0];
+        let index_data = &bytes[level_index_offset..level_index_offset + 24];
+        let byte_offset = u64::from_le_bytes(index_data[0..8].try_into().unwrap()) as usize;
+        let uncompressed_length = u64::from_le_bytes(index_data[16..24].try_into().unwrap()) as usize;
 
-        // 获取纹理数据
-        // 注意：这里需要根据实际的纹理格式进行解压缩
-        // 目前简化处理，直接使用原始数据
-        let texture_data = first_level.data.to_vec();
+        // 验证偏移
+        if byte_offset >= bytes.len() {
+            return Err(format!("Invalid KTX2 byteOffset: {}", byte_offset));
+        }
+
+        // 读取纹理数据
+        let data_start = byte_offset;
+        let data_end = byte_offset + uncompressed_length;
+
+        if data_end > bytes.len() {
+            return Err("KTX2 data extends beyond file".to_string());
+        }
+
+        let texture_data = bytes[data_start..data_end].to_vec();
+
+        // 验证数据大小
+        let expected_size = width as usize * height as usize * 4; // RGBA8
+        if texture_data.len() != expected_size {
+            return Err(format!(
+                "KTX2 data size mismatch: expected {} bytes, got {} bytes",
+                expected_size,
+                texture_data.len()
+            ));
+        }
 
         self.dimensions = Some((width, height));
         self.image_data = Some(texture_data);

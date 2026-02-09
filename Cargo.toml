@@ -11,12 +11,22 @@ path = "src/bin/ktx2_generator.rs"
 name = "test_ktx2"
 path = "src/bin/test_ktx2.rs"
 
+[[bin]]
+name = "debug_ktx2"
+path = "src/bin/debug_ktx2.rs"
+
+[[bin]]
+name = "test_fix"
+path = "src/bin/test_fix.rs"
+
+[[bin]]
+name = "find_offset"
+path = "src/bin/find_offset.rs"
+
 [dependencies]
 iced = { version = "0.14", features = ["wgpu", "image"] }
 image = "0.25"
 ktx2 = "0.4"
-basis-universal = "0.3.1"
-chrono = "0.4"
 
 [dependencies.web-sys]
 version = "0.3"
