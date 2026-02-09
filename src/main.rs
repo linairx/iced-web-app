@@ -1,8 +1,11 @@
-use iced::widget::{button, column, container, text};
+mod texture;
+
+use iced::widget::{button, column, container, text, image as iced_image};
 use iced::{Center, Element, Length, Subscription, Task, Font};
 use iced::event::{self, Event};
 use iced::mouse;
 use iced::window;
+use texture::TextureLoader;
 
 // Default font
 const DEFAULT_FONT: Font = Font::DEFAULT;
@@ -19,6 +22,7 @@ struct Counter {
     mouse_position: Option<mouse::Cursor>,
     mouse_buttons: String,
     last_event: String,
+    texture_loader: TextureLoader,
 }
 
 #[derive(Debug, Clone)]
@@ -26,6 +30,10 @@ enum Message {
     Increment,
     Decrement,
     EventOccurred(Event),
+    TextureLoaded(Vec<u8>),
+    LoadTexture,
+    Ktx2TextureLoaded(Vec<u8>),
+    LoadKtx2Texture,
 }
 
 impl Counter {
@@ -46,6 +54,52 @@ impl Counter {
             Message::EventOccurred(event) => {
                 self.handle_event(event);
             }
+            Message::TextureLoaded(data) => {
+                if let Err(e) = self.texture_loader.load_from_png_bytes(&data) {
+                    log_to_console("Texture load error", &e);
+                } else {
+                    log_to_console("Texture loaded",
+                        &format!("Size: {:?}", self.texture_loader.dimensions()));
+                }
+            }
+            Message::LoadTexture => {
+                // 在 WASM 环境中，使用 JavaScript 加载纹理
+                #[cfg(target_arch = "wasm32")]
+                {
+                    return load_texture_from_js();
+                }
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    log_to_console("Load texture", "Not supported on native");
+                }
+            }
+            Message::LoadKtx2Texture => {
+                // 在 WASM 环境中，使用 JavaScript 加载 KTX2 纹理
+                #[cfg(target_arch = "wasm32")]
+                {
+                    return load_ktx2_from_js();
+                }
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    // 在原生环境中，从文件系统加载
+                    match std::fs::read("public/1.ktx2") {
+                        Ok(data) => {
+                            return Task::perform(async move { data }, Message::Ktx2TextureLoaded);
+                        }
+                        Err(e) => {
+                            log_to_console("Load KTX2 error", &format!("无法读取文件: {}", e));
+                        }
+                    }
+                }
+            }
+            Message::Ktx2TextureLoaded(data) => {
+                if let Err(e) = self.texture_loader.load_from_ktx2_bytes(&data) {
+                    log_to_console("KTX2 load error", &e);
+                } else {
+                    log_to_console("KTX2 texture loaded",
+                        &format!("Size: {:?}", self.texture_loader.dimensions()));
+                }
+            }
         }
         Task::none()
     }
@@ -60,9 +114,23 @@ impl Counter {
             "Mouse: Not detected".to_string()
         };
 
+        // 创建图像 widget
+        let texture_view: Element<'_, Message> = if let Some(handle) = self.texture_loader.as_iced_handle() {
+            container(iced_image(handle).width(Length::Fixed(300.0))).into()
+        } else {
+            container(text("No texture loaded")
+                .size(14)
+                .font(DEFAULT_FONT))
+            .width(Length::Fixed(300.0))
+            .height(Length::Fixed(200.0))
+            .center_x(Length::Fill)
+            .center_y(Length::Fill)
+            .into()
+        };
+
         container(
             column![
-                text("🖱️ Mouse Event Demo")
+                text("🖱️ Mouse Event & Texture Demo")
                     .size(30)
                     .font(DEFAULT_FONT),
                 text(mouse_info)
@@ -78,6 +146,14 @@ impl Counter {
                     .on_press(Message::Increment),
                 button("Decrement ➖")
                     .on_press(Message::Decrement),
+                button("📷 Load Texture (1.png)")
+                    .on_press(Message::LoadTexture),
+                button("🎨 Load KTX2 Texture (1.ktx2)")
+                    .on_press(Message::LoadKtx2Texture),
+                text("Texture Preview:")
+                    .size(18)
+                    .font(DEFAULT_FONT),
+                texture_view,
                 text(format!("Last event: {}", self.last_event))
                     .size(14)
                     .font(DEFAULT_FONT)
@@ -196,4 +272,104 @@ fn log_to_console(event: &str, details: &str) {
     {
         println!("{}: {}", event, details);
     }
+}
+
+/// 从 JavaScript 加载纹理（仅 WASM）
+#[cfg(target_arch = "wasm32")]
+fn load_texture_from_js() -> Task<Message> {
+    use iced::Task;
+    use wasm_bindgen::JsCast;
+    use wasm_bindgen_futures::JsFuture;
+
+    Task::perform(
+        async {
+            let window = web_sys::window().expect("no global `window` exists");
+
+            // 使用 fetch API
+            let promise = window.fetch_with_str("1.png");
+            let response_value = match JsFuture::from(promise).await {
+                Ok(val) => val,
+                Err(e) => {
+                    log_to_console("Fetch error", &format!("{:?}", e));
+                    return vec![];
+                }
+            };
+
+            let response: web_sys::Response = response_value.dyn_into().expect("response not valid");
+
+            // 获取 array buffer
+            let array_buffer_promise = response.array_buffer().expect("failed to get array buffer");
+            let array_buffer = match JsFuture::from(array_buffer_promise).await {
+                Ok(buf) => buf,
+                Err(e) => {
+                    log_to_console("ArrayBuffer error", &format!("{:?}", e));
+                    return vec![];
+                }
+            };
+
+            let u8_array: js_sys::Uint8Array = js_sys::Uint8Array::new(&array_buffer);
+            let mut vec = vec![0; u8_array.length() as usize];
+            u8_array.copy_to(&mut vec);
+
+            log_to_console("Texture fetch", &format!("Loaded {} bytes", vec.len()));
+            vec
+        },
+        Message::TextureLoaded,
+    )
+}
+
+/// 占位函数（非 WASM 平台）
+#[cfg(not(target_arch = "wasm32"))]
+fn load_texture_from_js() -> Task<Message> {
+    Task::none()
+}
+
+/// 从 JavaScript 加载 KTX2 纹理（仅 WASM）
+#[cfg(target_arch = "wasm32")]
+fn load_ktx2_from_js() -> Task<Message> {
+    use iced::Task;
+    use wasm_bindgen::JsCast;
+    use wasm_bindgen_futures::JsFuture;
+
+    Task::perform(
+        async {
+            let window = web_sys::window().expect("no global `window` exists");
+
+            // 使用 fetch API 加载 KTX2 文件
+            let promise = window.fetch_with_str("1.ktx2");
+            let response_value = match JsFuture::from(promise).await {
+                Ok(val) => val,
+                Err(e) => {
+                    log_to_console("KTX2 Fetch error", &format!("{:?}", e));
+                    return vec![];
+                }
+            };
+
+            let response: web_sys::Response = response_value.dyn_into().expect("response not valid");
+
+            // 获取 array buffer
+            let array_buffer_promise = response.array_buffer().expect("failed to get array buffer");
+            let array_buffer = match JsFuture::from(array_buffer_promise).await {
+                Ok(buf) => buf,
+                Err(e) => {
+                    log_to_console("KTX2 ArrayBuffer error", &format!("{:?}", e));
+                    return vec![];
+                }
+            };
+
+            let u8_array: js_sys::Uint8Array = js_sys::Uint8Array::new(&array_buffer);
+            let mut vec = vec![0; u8_array.length() as usize];
+            u8_array.copy_to(&mut vec);
+
+            log_to_console("KTX2 fetch", &format!("Loaded {} bytes", vec.len()));
+            vec
+        },
+        Message::Ktx2TextureLoaded,
+    )
+}
+
+/// 占位函数（非 WASM 平台）
+#[cfg(not(target_arch = "wasm32"))]
+fn load_ktx2_from_js() -> Task<Message> {
+    Task::none()
 }

@@ -3,8 +3,20 @@ name = "iced_web_app"
 version = "0.1.0"
 edition = "2024"
 
+[[bin]]
+name = "ktx2_generator"
+path = "src/bin/ktx2_generator.rs"
+
+[[bin]]
+name = "test_ktx2"
+path = "src/bin/test_ktx2.rs"
+
 [dependencies]
-iced = { version = "0.14", features = ["wgpu"] }
+iced = { version = "0.14", features = ["wgpu", "image"] }
+image = "0.25"
+ktx2 = "0.4"
+basis-universal = "0.3.1"
+chrono = "0.4"
 
 [dependencies.web-sys]
 version = "0.3"
@@ -15,8 +27,10 @@ features = [
 ]
 
 [target.wasm32-unknown-unknown.dependencies]
-iced = { version = "0.14", features = ["wgpu"] }
+iced = { version = "0.14", features = ["wgpu", "image"] }
 wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+js-sys = "0.3"
 web-sys = { version = "0.3", features = [
     "console",
     "Window",
@@ -24,6 +38,10 @@ web-sys = { version = "0.3", features = [
     "HtmlFontElement",
     "FontFace",
     "FontFaceSet",
+    "Response",
+    "Request",
+    "RequestInit",
+    "RequestMode",
 ] }
 
 [profile.release]
